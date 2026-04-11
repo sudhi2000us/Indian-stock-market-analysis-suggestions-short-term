@@ -1,5 +1,5 @@
 # =========================================================
-# 📊 INDIAN MARKET INTELLIGENCE - PRO V6 (STABLE)
+# 📊 INDIAN MARKET INTELLIGENCE - PRO V7 (UI FIXED)
 # =========================================================
 
 import streamlit as st
@@ -10,17 +10,39 @@ import yfinance as yf
 st.set_page_config(page_title="Market Intelligence PRO", layout="wide")
 
 # =========================================================
-# 🎨 UI STYLE
+# 🎨 MODERN UI THEME (FIXED READABILITY)
 # =========================================================
 st.markdown("""
 <style>
-body {background-color:#0f172a; color:white;}
-.card {
-    background:#1e293b;
-    padding:15px;
-    border-radius:12px;
-    margin-bottom:10px;
+body {
+    background-color: #0b1220;
+    color: #e5e7eb;
 }
+
+h1, h2, h3 {
+    color: #ffffff;
+}
+
+.card {
+    background: linear-gradient(135deg, #1e293b, #0f172a);
+    padding: 20px;
+    border-radius: 14px;
+    color: #f1f5f9;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+}
+
+.top-card {
+    background: linear-gradient(135deg, #1d4ed8, #1e40af);
+    padding: 25px;
+    border-radius: 16px;
+    color: white;
+    font-size: 16px;
+}
+
+table {
+    color: white !important;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -35,7 +57,6 @@ def fetch_stock_data(symbol):
     if df.empty:
         return df
 
-    # Fix multi-index issue
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
 
@@ -45,29 +66,25 @@ def fetch_stock_data(symbol):
     return df
 
 # =========================================================
-# 🧠 ADVANCED INDICATORS (FIXED)
+# 🧠 INDICATORS
 # =========================================================
-def add_advanced_indicators(df):
+def add_indicators(df):
 
-    # RSI
     delta = df['Close'].diff()
     gain = delta.clip(lower=0).rolling(14).mean()
     loss = -delta.clip(upper=0).rolling(14).mean()
     rs = gain / (loss + 1e-9)
     rsi = 100 - (100 / (1 + rs))
 
-    # Stoch RSI
-    stoch_rsi = (rsi - rsi.rolling(14).min()) / (rsi.rolling(14).max() - rsi.rolling(14).min() + 1e-9)
-    df['stoch_rsi'] = stoch_rsi * 100
+    df['stoch_rsi'] = ((rsi - rsi.rolling(14).min()) /
+                      (rsi.rolling(14).max() - rsi.rolling(14).min() + 1e-9)) * 100
 
-    # Williams %R
     hh = df['High'].rolling(14).max()
     ll = df['Low'].rolling(14).min()
     df['williams_r'] = -100 * ((hh - df['Close']) / (hh - ll + 1e-9))
 
-    # OBV (FIXED)
-    close = df['Close'].astype(float).values
-    volume = df['Volume'].astype(float).values
+    close = df['Close'].values
+    volume = df['Volume'].values
 
     obv = [0]
     for i in range(1, len(close)):
@@ -81,82 +98,53 @@ def add_advanced_indicators(df):
     df['obv'] = obv
     df['obv_slope'] = pd.Series(obv).diff()
 
-    # VWAP
-    vwap = (df['Close'] * df['Volume']).cumsum() / (df['Volume'].cumsum() + 1e-9)
-    df['vwap'] = vwap
-    df['vwap_dev'] = (df['Close'] - df['vwap']) / df['vwap']
+    vwap = (df['Close'] * df['Volume']).cumsum() / df['Volume'].cumsum()
+    df['vwap_dev'] = (df['Close'] - vwap) / vwap
 
-    # Donchian
     dc_high = df['High'].rolling(20).max()
     dc_low = df['Low'].rolling(20).min()
     df['donchian_pos'] = ((df['Close'] - dc_low) / (dc_high - dc_low + 1e-9)) * 100
 
-    # EMA slope
     df['ema20'] = df['Close'].ewm(span=20).mean()
     df['ema_slope'] = df['ema20'].diff()
 
     return df
 
 # =========================================================
-# 🎯 SCORING ENGINE (BALANCED)
+# 🎯 SCORING
 # =========================================================
 def calculate_score(df):
 
     score = 0
 
-    stoch = df['stoch_rsi'].iloc[-1]
-    will = df['williams_r'].iloc[-1]
-    obv = df['obv_slope'].iloc[-1]
-    vwap = df['vwap_dev'].iloc[-1]
-    donch = df['donchian_pos'].iloc[-1]
-    ema = df['ema_slope'].iloc[-1]
-
-    # Relaxed scoring
-    if stoch > 70:
-        score += 3
-    elif stoch < 30:
-        score -= 2
-
-    if will < -80:
-        score += 3
-    elif will > -20:
-        score -= 3
-
-    if obv > 0:
-        score += 4
-
-    if vwap < -0.01:
-        score += 2
-    elif vwap > 0.04:
-        score -= 3
-
-    if donch > 70:
-        score += 3
-
-    if ema > 0:
-        score += 3
+    if df['stoch_rsi'].iloc[-1] > 70: score += 3
+    if df['williams_r'].iloc[-1] < -80: score += 3
+    if df['obv_slope'].iloc[-1] > 0: score += 4
+    if df['vwap_dev'].iloc[-1] < -0.01: score += 2
+    if df['donchian_pos'].iloc[-1] > 70: score += 3
+    if df['ema_slope'].iloc[-1] > 0: score += 3
 
     return score
 
 # =========================================================
-# 📊 STOCK LIST
+# 📊 STOCKS
 # =========================================================
 stocks = {
-    "Reliance": "RELIANCE.NS",
-    "TCS": "TCS.NS",
-    "Infosys": "INFY.NS",
-    "HDFC Bank": "HDFCBANK.NS",
-    "ICICI Bank": "ICICIBANK.NS",
     "ITC": "ITC.NS",
+    "TCS": "TCS.NS",
     "L&T": "LT.NS",
+    "ICICI Bank": "ICICIBANK.NS",
     "SBI": "SBIN.NS",
-    "Titan": "TITAN.NS"
+    "HDFC Bank": "HDFCBANK.NS",
+    "Titan": "TITAN.NS",
+    "Infosys": "INFY.NS",
+    "Reliance": "RELIANCE.NS"
 }
 
 results = []
 
 # =========================================================
-# 🚀 MAIN ENGINE
+# 🚀 MAIN LOOP
 # =========================================================
 for name, symbol in stocks.items():
 
@@ -165,12 +153,10 @@ for name, symbol in stocks.items():
     if df.empty or len(df) < 30:
         continue
 
-    df = add_advanced_indicators(df)
-
+    df = add_indicators(df)
     score = calculate_score(df)
 
     price = df['Close'].iloc[-1]
-
     target = price * (1 + score / 100)
     stoploss = price * 0.97
 
@@ -190,15 +176,19 @@ if results:
     df_results = pd.DataFrame(results).sort_values(by="Score", ascending=False)
 
     st.subheader("📈 Short Term Opportunities (1 Week - 1 Month)")
-    st.dataframe(df_results, use_container_width=True)
 
-    # Top pick safe handling
+    # Highlight table
+    st.dataframe(
+        df_results.style.background_gradient(cmap="Blues"),
+        use_container_width=True
+    )
+
     best = df_results.iloc[0]
 
     st.markdown(f"""
-    <div class="card">
-    <h3>🔥 Top Pick: {best['Stock']}</h3>
-    Score: {best['Score']}<br>
+    <div class="top-card">
+    🔥 <b>Top Pick: {best['Stock']}</b><br><br>
+    Score: <b>{best['Score']}</b><br>
     Price: ₹{best['Price']}<br>
     Target: ₹{best['Target']}<br>
     Stoploss: ₹{best['Stoploss']}
@@ -208,7 +198,4 @@ if results:
 else:
     st.warning("No strong opportunities found today.")
 
-# =========================================================
-# ⏱ AUTO REFRESH
-# =========================================================
 st.caption("AI-driven market intelligence running...")
