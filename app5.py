@@ -49,15 +49,24 @@ def global_score():
     indices = ["^GSPC","^IXIC","^DJI","^N225","^HSI"]
     score = 0
 
-    for i in indices:
-        df = yf.download(i, period="2d", interval="1d")
-        if len(df) > 1:
-            if df['Close'].iloc[-1] > df['Close'].iloc[-2]:
-                score += 2
-            else:
-                score -= 2
-    return score
+    for symbol in indices:
+        df = yf.download(symbol, period="2d", interval="1d")
 
+        if df.empty or len(df) < 2:
+            continue
+
+        # 🔧 FIX MULTI-INDEX ISSUE
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+
+        close = df['Close'].astype(float).values
+
+        if close[-1] > close[-2]:
+            score += 2
+        else:
+            score -= 2
+
+    return score
 # =========================================================
 # 🏦 SECTOR SCORE
 # =========================================================
