@@ -1,5 +1,6 @@
 # =========================================================
-# 📊 INDIAN MARKET INTELLIGENCE - PRO V10 (HEDGE FUND)
+# 📊 INDIAN MARKET INTELLIGENCE PRO V11
+# Clean UI + Smart Intelligence
 # =========================================================
 
 import streamlit as st
@@ -16,28 +17,31 @@ st.set_page_config(page_title="Market Intelligence PRO", layout="wide")
 NEWS_API_KEY = "2e99f73f7e4346c08f94c6d464bf7315"
 
 # =========================================================
-# 🎨 MODERN UI
+# 🎨 CLEAN LIGHT UI (FIXED READABILITY)
 # =========================================================
 st.markdown("""
 <style>
-body {background:#0b1220; color:#e5e7eb;}
+body {
+    background-color:#f5f7fb;
+    color:#1f2937;
+}
 .card {
-    background: linear-gradient(135deg,#1e293b,#0f172a);
-    padding:20px;
-    border-radius:14px;
-    margin-bottom:10px;
+    background:white;
+    padding:18px;
+    border-radius:12px;
+    box-shadow:0 4px 12px rgba(0,0,0,0.08);
 }
 .metric {
     font-size:22px;
     font-weight:bold;
 }
-.good {color:#22c55e;}
-.bad {color:#ef4444;}
-.neutral {color:#facc15;}
+.good {color:#16a34a;}
+.bad {color:#dc2626;}
+.neutral {color:#ca8a04;}
 </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 Market Intelligence PRO V10")
+st.title("📊 Indian Market Intelligence PRO V11")
 
 # =========================================================
 # 🧼 CLEAN DF
@@ -48,7 +52,7 @@ def clean_df(df):
     return df
 
 # =========================================================
-# 🌍 GLOBAL MARKETS
+# 🌍 GLOBAL SCORE
 # =========================================================
 def global_score():
     indices = ["^GSPC","^IXIC","^DJI","^N225","^HSI"]
@@ -56,11 +60,11 @@ def global_score():
 
     for symbol in indices:
         df = yf.download(symbol, period="2d")
-        if df.empty or len(df)<2: continue
+        if df.empty or len(df) < 2:
+            continue
 
         df = clean_df(df)
         close = df['Close'].values
-
         score += 2 if close[-1] > close[-2] else -2
 
     return score
@@ -77,7 +81,6 @@ def fetch_news():
         return []
 
 def news_score():
-
     headlines = fetch_news()
 
     negative = ["war","conflict","attack","tension","inflation","rate hike","crisis","oil","fear","recession","failed"]
@@ -91,10 +94,11 @@ def news_score():
         for w in positive:
             if w in h: score += 2
 
-    return score
+    # 🔥 CAP IMPACT (IMPORTANT FIX)
+    return max(min(score, 10), -10)
 
 # =========================================================
-# 🏦 SECTOR ROTATION
+# 🏦 SECTOR SCORE
 # =========================================================
 def sector_score(symbol):
 
@@ -139,9 +143,16 @@ def indicators(df):
 # =========================================================
 def stock_score(df):
     s=0
-    if df['stoch'].iloc[-1]>60: s+=3
-    if df['ema_slope'].iloc[-1]>0: s+=3
+    if df['stoch'].iloc[-1] > 55: s+=3
+    if df['ema_slope'].iloc[-1] > 0: s+=3
     return s
+
+# =========================================================
+# 🛡️ DEFENSIVE BOOST
+# =========================================================
+def defensive_boost(stock):
+    defensive = ["ITC","HDFC","SBI"]
+    return 2 if stock in defensive else 0
 
 # =========================================================
 # 📊 STOCK LIST
@@ -158,6 +169,9 @@ stocks={
 g = global_score()
 n = news_score()
 
+# =========================================================
+# 📊 DASHBOARD CARDS
+# =========================================================
 col1,col2,col3 = st.columns(3)
 
 with col1:
@@ -167,18 +181,22 @@ with col2:
     st.markdown(f'<div class="card"><div class="metric">📰 News Score<br>{n}</div></div>',unsafe_allow_html=True)
 
 risk = "LOW"
-if n < -5: risk = "HIGH"
-elif g < -5: risk = "HIGH"
+if n < -5 or g < -5:
+    risk = "HIGH"
 
 with col3:
     st.markdown(f'<div class="card"><div class="metric">⚠️ Risk<br>{risk}</div></div>',unsafe_allow_html=True)
 
+# =========================================================
+# 📊 ENGINE
+# =========================================================
 results=[]
 
 for name,symbol in stocks.items():
 
     df = yf.download(symbol, period="3mo")
-    if df.empty or len(df)<30: continue
+    if df.empty or len(df)<30:
+        continue
 
     df = clean_df(df)
     df = df[['Open','High','Low','Close','Volume']]
@@ -188,17 +206,23 @@ for name,symbol in stocks.items():
     s = stock_score(df)
     sec = sector_score(symbol)
 
-    final = (s*0.4)+(sec*0.2)+(g*0.2)+(n*0.2)
+    final = (
+        s*0.4 +
+        sec*0.2 +
+        g*0.2 +
+        n*0.2 +
+        defensive_boost(name)
+    )
 
     price = df['Close'].iloc[-1]
     target = price*(1+final/100)
     sl = price*0.97
-    conf = min(100,max(50,final*5))
+    confidence = max(40, min(90, final*6))
 
     results.append({
         "Stock":name,
         "Score":round(final,2),
-        "Confidence":conf,
+        "Confidence":round(confidence,0),
         "Price":round(price,2),
         "Target":round(target,2),
         "Stoploss":round(sl,2)
@@ -212,7 +236,7 @@ if results:
     df_out = pd.DataFrame(results).sort_values(by="Score",ascending=False)
 
     st.subheader("📈 Trade Opportunities")
-    st.dataframe(df_out,use_container_width=True)
+    st.dataframe(df_out, use_container_width=True)
 
     best = df_out.iloc[0]
 
@@ -223,12 +247,18 @@ if results:
     Target: ₹{best['Target']}<br>
     Stoploss: ₹{best['Stoploss']}
     </div>
-    """,unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
-    if risk=="HIGH":
-        st.error("⚠️ Market Risk High — Avoid Aggressive Trading")
+    # 🎯 STRATEGY MESSAGE
+    if n < -5:
+        st.warning("📉 Risk-off Market: Focus on defensive stocks (ITC, Banks)")
+    elif n > 5:
+        st.success("🚀 Risk-on Market: Good for aggressive buying")
+
+    if risk == "HIGH":
+        st.error("⚠️ Market Risk High — Avoid aggressive trading")
 
 else:
     st.warning("No trades today")
 
-st.caption("Hedge-fund style intelligence engine running...")
+st.caption("AI-powered hedge-style intelligence running...")
