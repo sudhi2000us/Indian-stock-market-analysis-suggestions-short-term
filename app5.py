@@ -69,7 +69,7 @@ def global_score():
 # 📰 NEWS
 # =========================================================
 def fetch_news():
-    url = f"https://newsapi.org/v2/everything?q=stock%20market%20india&language=en&pageSize=20&apiKey={2e99f73f7e4346c08f94c6d464bf7315}"
+    url = f"https://newsapi.org/v2/everything?q=stock%20market%20india&language=en&pageSize=20&apiKey={NEWS_API_KEY}"
     try:
         data = requests.get(url).json()
         return [a['title'].lower() for a in data.get("articles",[])]
