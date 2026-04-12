@@ -72,7 +72,7 @@ def global_score():
 def fetch_news():
 
     urls = [
-        "https://newsapi.org/v2/top-headlines?category=business&language=en&pageSize=20&apiKey=YOUR_API_KEY",
+        "https://newsapi.org/v2/top-headlines?category=business&language=en&pageSize=20&apiKey=2e99f73f7e4346c08f94c6d464bf7315",
         "https://newsapi.org/v2/everything?q=stock%20market%20india&language=en&pageSize=20&apiKey=YOUR_API_KEY"
     ]
 
