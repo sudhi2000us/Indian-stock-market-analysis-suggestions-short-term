@@ -6,3 +6,4 @@ requests
 beautifulsoup4
 yfinance
 matplotlib
+plotly.graph_objects
