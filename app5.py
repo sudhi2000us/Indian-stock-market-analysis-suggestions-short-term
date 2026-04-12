@@ -1,6 +1,5 @@
 # =========================================================
-# 📊 INDIAN MARKET INTELLIGENCE PRO V11
-# Clean UI + Smart Intelligence
+# 📊 INDIAN MARKET INTELLIGENCE PRO V12 (FULL SYSTEM)
 # =========================================================
 
 import streamlit as st
@@ -8,40 +7,31 @@ import pandas as pd
 import numpy as np
 import yfinance as yf
 import requests
+from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(page_title="Market Intelligence PRO", layout="wide")
 
-# =========================================================
-# 🔐 CONFIG
-# =========================================================
+# 🔄 AUTO REFRESH EVERY 5 MIN
+st_autorefresh(interval=300000, key="refresh")
+
 NEWS_API_KEY = "2e99f73f7e4346c08f94c6d464bf7315"
 
 # =========================================================
-# 🎨 CLEAN LIGHT UI (FIXED READABILITY)
+# 🎨 UI
 # =========================================================
 st.markdown("""
 <style>
-body {
-    background-color:#f5f7fb;
-    color:#1f2937;
-}
+body {background:#f5f7fb;}
 .card {
     background:white;
-    padding:18px;
-    border-radius:12px;
-    box-shadow:0 4px 12px rgba(0,0,0,0.08);
+    padding:16px;
+    border-radius:10px;
+    box-shadow:0 4px 10px rgba(0,0,0,0.1);
 }
-.metric {
-    font-size:22px;
-    font-weight:bold;
-}
-.good {color:#16a34a;}
-.bad {color:#dc2626;}
-.neutral {color:#ca8a04;}
 </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 Indian Market Intelligence PRO V11")
+st.title("📊 Market Intelligence PRO V12")
 
 # =========================================================
 # 🧼 CLEAN DF
@@ -57,105 +47,113 @@ def clean_df(df):
 def global_score():
     indices = ["^GSPC","^IXIC","^DJI","^N225","^HSI"]
     score = 0
-
-    for symbol in indices:
-        df = yf.download(symbol, period="2d")
-        if df.empty or len(df) < 2:
-            continue
-
-        df = clean_df(df)
-        close = df['Close'].values
-        score += 2 if close[-1] > close[-2] else -2
-
+    for i in indices:
+        df = yf.download(i, period="2d")
+        if len(df)>1:
+            df=clean_df(df)
+            c=df['Close'].values
+            score += 2 if c[-1]>c[-2] else -2
     return score
 
 # =========================================================
-# 📰 NEWS
+# 📰 NEWS SCORE
 # =========================================================
-def fetch_news():
-    url = f"https://newsapi.org/v2/everything?q=stock%20market%20india&language=en&pageSize=20&apiKey={NEWS_API_KEY}"
-    try:
-        data = requests.get(url).json()
-        return [a['title'].lower() for a in data.get("articles",[])]
-    except:
-        return []
-
 def news_score():
-    headlines = fetch_news()
+    try:
+        url=f"https://newsapi.org/v2/everything?q=stock%20market&apiKey={NEWS_API_KEY}"
+        data=requests.get(url).json()
+        headlines=[a['title'].lower() for a in data.get("articles",[])]
+    except:
+        return 0
 
-    negative = ["war","conflict","attack","tension","inflation","rate hike","crisis","oil","fear","recession","failed"]
-    positive = ["deal","growth","recovery","positive","bullish","agreement","rate cut"]
+    neg=["war","conflict","inflation","crisis","attack","recession"]
+    pos=["growth","deal","recovery","bullish","positive"]
 
-    score = 0
-
+    score=0
     for h in headlines:
-        for w in negative:
-            if w in h: score -= 2
-        for w in positive:
-            if w in h: score += 2
+        for w in neg:
+            if w in h: score-=2
+        for w in pos:
+            if w in h: score+=2
 
-    # 🔥 CAP IMPACT (IMPORTANT FIX)
-    return max(min(score, 10), -10)
+    return max(min(score,10),-10)
 
 # =========================================================
-# 🏦 SECTOR SCORE
+# 🌅 PRE-MARKET (GIFT NIFTY PROXY)
 # =========================================================
-def sector_score(symbol):
+def premarket():
+    us = global_score()
+    asia = yf.download("^N225", period="2d")
+    asia_score = 0
+    if len(asia)>1:
+        asia=clean_df(asia)
+        c=asia['Close'].values
+        asia_score = 2 if c[-1]>c[-2] else -2
 
-    sectors = {
-        "BANK":["HDFCBANK.NS","ICICIBANK.NS","SBIN.NS"],
-        "IT":["TCS.NS","INFY.NS"],
-        "FMCG":["ITC.NS"],
-        "INFRA":["LT.NS"],
-        "CONS":["TITAN.NS"]
-    }
+    total = us + asia_score
 
+    if total > 2:
+        return "BULLISH"
+    elif total < -2:
+        return "BEARISH"
+    return "SIDEWAYS"
+
+# =========================================================
+# 🏦 SECTOR RANKING
+# =========================================================
+sectors = {
+    "BANK":["HDFCBANK.NS","ICICIBANK.NS","SBIN.NS"],
+    "IT":["TCS.NS","INFY.NS"],
+    "FMCG":["ITC.NS"],
+    "INFRA":["LT.NS"],
+    "CONS":["TITAN.NS"]
+}
+
+def sector_strength():
+    result={}
     for s,stocks in sectors.items():
-        if symbol in stocks:
-            sc=0
-            for stk in stocks:
-                df = yf.download(stk, period="2d")
-                if len(df)>1:
-                    df=clean_df(df)
-                    c=df['Close'].values
-                    sc += 1 if c[-1]>c[-2] else -1
-            return sc
-    return 0
+        sc=0
+        for stk in stocks:
+            df=yf.download(stk, period="2d")
+            if len(df)>1:
+                df=clean_df(df)
+                c=df['Close'].values
+                sc += 1 if c[-1]>c[-2] else -1
+        result[s]=sc
+    return sorted(result.items(), key=lambda x:x[1], reverse=True)
 
 # =========================================================
 # 📊 INDICATORS
 # =========================================================
 def indicators(df):
-
-    df['ema20'] = df['Close'].ewm(span=20).mean()
-    df['ema_slope'] = df['ema20'].diff()
-
-    df['rsi'] = 100 - (100/(1+(df['Close'].diff().clip(lower=0).rolling(14).mean() /
-                                 (df['Close'].diff().clip(upper=0).abs().rolling(14).mean()+1e-9))))
-
-    df['stoch'] = ((df['rsi']-df['rsi'].rolling(14).min()) /
-                   (df['rsi'].rolling(14).max()-df['rsi'].rolling(14).min()+1e-9))*100
-
+    df['ema20']=df['Close'].ewm(span=20).mean()
+    df['ema_slope']=df['ema20'].diff()
+    df['rsi']=100-(100/(1+(df['Close'].diff().clip(lower=0).rolling(14).mean() /
+                             (df['Close'].diff().clip(upper=0).abs().rolling(14).mean()+1e-9))))
     return df
 
 # =========================================================
-# 🎯 STOCK SCORE
+# 🎯 STOCK SCORE + OPTIONS SIGNAL
 # =========================================================
-def stock_score(df):
-    s=0
-    if df['stoch'].iloc[-1] > 55: s+=3
-    if df['ema_slope'].iloc[-1] > 0: s+=3
-    return s
+def analyze(df):
+    score=0
+    signal="NEUTRAL"
+
+    if df['ema_slope'].iloc[-1]>0:
+        score+=3
+        signal="CE BUY"
+
+    if df['rsi'].iloc[-1]<40:
+        score+=2
+
+    if df['ema_slope'].iloc[-1]<0:
+        score-=3
+        signal="PE BUY"
+
+    return score, signal
 
 # =========================================================
-# 🛡️ DEFENSIVE BOOST
-# =========================================================
-def defensive_boost(stock):
-    defensive = ["ITC","HDFC","SBI"]
-    return 2 if stock in defensive else 0
-
-# =========================================================
-# 📊 STOCK LIST
+# 📊 STOCKS
 # =========================================================
 stocks={
 "ITC":"ITC.NS","TCS":"TCS.NS","L&T":"LT.NS",
@@ -166,99 +164,81 @@ stocks={
 # =========================================================
 # 🚀 MAIN ENGINE
 # =========================================================
-g = global_score()
-n = news_score()
+g=global_score()
+n=news_score()
+pm=premarket()
+
+col1,col2,col3=st.columns(3)
+
+col1.metric("🌍 Global", g)
+col2.metric("📰 News", n)
+col3.metric("🌅 Pre-Market", pm)
 
 # =========================================================
-# 📊 DASHBOARD CARDS
+# 📊 SECTOR PANEL
 # =========================================================
-col1,col2,col3 = st.columns(3)
-
-with col1:
-    st.markdown(f'<div class="card"><div class="metric">🌍 Global Score<br>{g}</div></div>',unsafe_allow_html=True)
-
-with col2:
-    st.markdown(f'<div class="card"><div class="metric">📰 News Score<br>{n}</div></div>',unsafe_allow_html=True)
-
-risk = "LOW"
-if n < -5 or g < -5:
-    risk = "HIGH"
-
-with col3:
-    st.markdown(f'<div class="card"><div class="metric">⚠️ Risk<br>{risk}</div></div>',unsafe_allow_html=True)
+st.subheader("🏭 Sector Strength")
+sector_data=sector_strength()
+st.write(sector_data)
 
 # =========================================================
-# 📊 ENGINE
+# 📊 STOCK ANALYSIS
 # =========================================================
 results=[]
 
 for name,symbol in stocks.items():
 
-    df = yf.download(symbol, period="3mo")
-    if df.empty or len(df)<30:
-        continue
+    df=yf.download(symbol, period="3mo")
+    if len(df)<30: continue
 
-    df = clean_df(df)
-    df = df[['Open','High','Low','Close','Volume']]
+    df=clean_df(df)
+    df=df[['Open','High','Low','Close','Volume']]
+    df=indicators(df)
 
-    df = indicators(df)
+    s,signal=analyze(df)
 
-    s = stock_score(df)
-    sec = sector_score(symbol)
+    final = s + (g*0.2) + (n*0.2)
 
-    final = (
-        s*0.4 +
-        sec*0.2 +
-        g*0.2 +
-        n*0.2 +
-        defensive_boost(name)
-    )
-
-    price = df['Close'].iloc[-1]
-    target = price*(1+final/100)
-    sl = price*0.97
-    confidence = max(40, min(90, final*6))
+    price=df['Close'].iloc[-1]
 
     results.append({
         "Stock":name,
         "Score":round(final,2),
-        "Confidence":round(confidence,0),
+        "Signal":signal,
         "Price":round(price,2),
-        "Target":round(target,2),
-        "Stoploss":round(sl,2)
+        "Target":round(price*1.03,2),
+        "Stoploss":round(price*0.97,2)
     })
 
 # =========================================================
 # 📋 OUTPUT
 # =========================================================
-if results:
+df_out=pd.DataFrame(results).sort_values(by="Score",ascending=False)
 
-    df_out = pd.DataFrame(results).sort_values(by="Score",ascending=False)
+st.subheader("📈 Trade Opportunities")
+st.dataframe(df_out, use_container_width=True)
 
-    st.subheader("📈 Trade Opportunities")
-    st.dataframe(df_out, use_container_width=True)
+# =========================================================
+# 🔥 TOP PICK + CHART
+# =========================================================
+best=df_out.iloc[0]
 
-    best = df_out.iloc[0]
+st.subheader(f"🔥 Top Pick: {best['Stock']}")
 
-    st.markdown(f"""
-    <div class="card">
-    🔥 <b>Top Pick: {best['Stock']}</b><br><br>
-    Confidence: {best['Confidence']}%<br>
-    Target: ₹{best['Target']}<br>
-    Stoploss: ₹{best['Stoploss']}
-    </div>
-    """, unsafe_allow_html=True)
+st.write(best)
 
-    # 🎯 STRATEGY MESSAGE
-    if n < -5:
-        st.warning("📉 Risk-off Market: Focus on defensive stocks (ITC, Banks)")
-    elif n > 5:
-        st.success("🚀 Risk-on Market: Good for aggressive buying")
+# TradingView Chart
+st.components.v1.html(f"""
+<iframe src="https://s.tradingview.com/widgetembed/?symbol=NSE:{best['Stock']}&interval=60&theme=light"
+width="100%" height="400"></iframe>
+""", height=420)
 
-    if risk == "HIGH":
-        st.error("⚠️ Market Risk High — Avoid aggressive trading")
+# =========================================================
+# ⚠️ STRATEGY
+# =========================================================
+if n < -5:
+    st.warning("Risk-off: Prefer defensive stocks")
+elif n > 5:
+    st.success("Risk-on: Aggressive trades allowed")
 
-else:
-    st.warning("No trades today")
-
-st.caption("AI-powered hedge-style intelligence running...")
+st.caption("Auto-refresh every 5 minutes • Hedge-level intelligence")
