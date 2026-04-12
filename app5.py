@@ -13,7 +13,7 @@ st.set_page_config(page_title="Market Intelligence PRO", layout="wide")
 # =========================================================
 # 🔐 CONFIG
 # =========================================================
-NEWS_API_KEY = "YOUR_API_KEY"
+NEWS_API_KEY = "2e99f73f7e4346c08f94c6d464bf7315"
 
 # =========================================================
 # 🎨 MODERN UI
