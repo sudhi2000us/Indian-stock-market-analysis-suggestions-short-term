@@ -1,5 +1,5 @@
 # =========================================================
-# 📊 INDIAN MARKET INTELLIGENCE PRO V12 (FULL SYSTEM)
+# 📊 MARKET INTELLIGENCE PRO V13 (FIXED PROFESSIONAL UI)
 # =========================================================
 
 import streamlit as st
@@ -7,36 +7,38 @@ import pandas as pd
 import numpy as np
 import yfinance as yf
 import requests
+import plotly.graph_objects as go
 from streamlit_autorefresh import st_autorefresh
 
-st.set_page_config(page_title="Market Intelligence PRO", layout="wide")
+st.set_page_config(layout="wide")
 
-# 🔄 AUTO REFRESH EVERY 5 MIN
+# 🔄 Auto refresh every 5 min
 st_autorefresh(interval=300000, key="refresh")
 
 NEWS_API_KEY = "2e99f73f7e4346c08f94c6d464bf7315"
 
 # =========================================================
-# 🎨 UI
+# 🎨 CLEAN UI
 # =========================================================
 st.markdown("""
 <style>
-body {background:#f5f7fb;}
+.main {background:#f4f6fb;}
 .card {
     background:white;
     padding:16px;
-    border-radius:10px;
-    box-shadow:0 4px 10px rgba(0,0,0,0.1);
+    border-radius:12px;
+    box-shadow:0 3px 10px rgba(0,0,0,0.08);
 }
+.title {font-size:22px;font-weight:bold;}
 </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 Market Intelligence PRO V12")
+st.title("📊 Market Intelligence PRO")
 
 # =========================================================
 # 🧼 CLEAN DF
 # =========================================================
-def clean_df(df):
+def clean(df):
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
     return df
@@ -45,12 +47,12 @@ def clean_df(df):
 # 🌍 GLOBAL SCORE
 # =========================================================
 def global_score():
-    indices = ["^GSPC","^IXIC","^DJI","^N225","^HSI"]
+    indices = ["^GSPC","^IXIC","^DJI"]
     score = 0
     for i in indices:
         df = yf.download(i, period="2d")
         if len(df)>1:
-            df=clean_df(df)
+            df=clean(df)
             c=df['Close'].values
             score += 2 if c[-1]>c[-2] else -2
     return score
@@ -60,14 +62,14 @@ def global_score():
 # =========================================================
 def news_score():
     try:
-        url=f"https://newsapi.org/v2/everything?q=stock%20market&apiKey={NEWS_API_KEY}"
+        url=f"https://newsapi.org/v2/everything?q=market&apiKey={NEWS_API_KEY}"
         data=requests.get(url).json()
         headlines=[a['title'].lower() for a in data.get("articles",[])]
     except:
         return 0
 
-    neg=["war","conflict","inflation","crisis","attack","recession"]
-    pos=["growth","deal","recovery","bullish","positive"]
+    neg=["war","conflict","inflation","crisis","attack"]
+    pos=["growth","deal","positive"]
 
     score=0
     for h in headlines:
@@ -79,48 +81,29 @@ def news_score():
     return max(min(score,10),-10)
 
 # =========================================================
-# 🌅 PRE-MARKET (GIFT NIFTY PROXY)
-# =========================================================
-def premarket():
-    us = global_score()
-    asia = yf.download("^N225", period="2d")
-    asia_score = 0
-    if len(asia)>1:
-        asia=clean_df(asia)
-        c=asia['Close'].values
-        asia_score = 2 if c[-1]>c[-2] else -2
-
-    total = us + asia_score
-
-    if total > 2:
-        return "BULLISH"
-    elif total < -2:
-        return "BEARISH"
-    return "SIDEWAYS"
-
-# =========================================================
-# 🏦 SECTOR RANKING
+# 🏭 SECTOR STRENGTH (FIXED)
 # =========================================================
 sectors = {
     "BANK":["HDFCBANK.NS","ICICIBANK.NS","SBIN.NS"],
     "IT":["TCS.NS","INFY.NS"],
     "FMCG":["ITC.NS"],
     "INFRA":["LT.NS"],
-    "CONS":["TITAN.NS"]
+    "CONSUMPTION":["TITAN.NS"]
 }
 
 def sector_strength():
-    result={}
+    data=[]
     for s,stocks in sectors.items():
-        sc=0
+        score=0
         for stk in stocks:
             df=yf.download(stk, period="2d")
             if len(df)>1:
-                df=clean_df(df)
+                df=clean(df)
                 c=df['Close'].values
-                sc += 1 if c[-1]>c[-2] else -1
-        result[s]=sc
-    return sorted(result.items(), key=lambda x:x[1], reverse=True)
+                score += 1 if c[-1]>c[-2] else -1
+        data.append([s,score])
+    df=pd.DataFrame(data, columns=["Sector","Score"])
+    return df.sort_values(by="Score",ascending=False)
 
 # =========================================================
 # 📊 INDICATORS
@@ -133,22 +116,22 @@ def indicators(df):
     return df
 
 # =========================================================
-# 🎯 STOCK SCORE + OPTIONS SIGNAL
+# 🎯 ANALYSIS
 # =========================================================
 def analyze(df):
     score=0
-    signal="NEUTRAL"
+    signal="NO TRADE"
 
     if df['ema_slope'].iloc[-1]>0:
         score+=3
-        signal="CE BUY"
-
-    if df['rsi'].iloc[-1]<40:
-        score+=2
+        signal="BUY CE"
 
     if df['ema_slope'].iloc[-1]<0:
         score-=3
-        signal="PE BUY"
+        signal="BUY PE"
+
+    if df['rsi'].iloc[-1]<40:
+        score+=2
 
     return score, signal
 
@@ -162,24 +145,27 @@ stocks={
 }
 
 # =========================================================
-# 🚀 MAIN ENGINE
+# 🚀 MAIN
 # =========================================================
 g=global_score()
 n=news_score()
-pm=premarket()
 
-col1,col2,col3=st.columns(3)
-
-col1.metric("🌍 Global", g)
-col2.metric("📰 News", n)
-col3.metric("🌅 Pre-Market", pm)
+c1,c2,c3=st.columns(3)
+c1.metric("🌍 Global", g)
+c2.metric("📰 News", n)
+c3.metric("⚠️ Risk", "HIGH" if n<-5 else "NORMAL")
 
 # =========================================================
-# 📊 SECTOR PANEL
+# 🏭 SECTOR PANEL (FIXED)
 # =========================================================
 st.subheader("🏭 Sector Strength")
-sector_data=sector_strength()
-st.write(sector_data)
+
+sec_df=sector_strength()
+st.dataframe(sec_df, use_container_width=True)
+
+# Highlight best sector
+best_sector=sec_df.iloc[0]
+st.success(f"🔥 Strongest Sector: {best_sector['Sector']}")
 
 # =========================================================
 # 📊 STOCK ANALYSIS
@@ -191,13 +177,12 @@ for name,symbol in stocks.items():
     df=yf.download(symbol, period="3mo")
     if len(df)<30: continue
 
-    df=clean_df(df)
+    df=clean(df)
     df=df[['Open','High','Low','Close','Volume']]
     df=indicators(df)
 
     s,signal=analyze(df)
-
-    final = s + (g*0.2) + (n*0.2)
+    final=s+(g*0.2)+(n*0.2)
 
     price=df['Close'].iloc[-1]
 
@@ -210,35 +195,39 @@ for name,symbol in stocks.items():
         "Stoploss":round(price*0.97,2)
     })
 
-# =========================================================
-# 📋 OUTPUT
-# =========================================================
 df_out=pd.DataFrame(results).sort_values(by="Score",ascending=False)
 
 st.subheader("📈 Trade Opportunities")
 st.dataframe(df_out, use_container_width=True)
 
 # =========================================================
-# 🔥 TOP PICK + CHART
+# 📊 CHART (FIXED - PLOTLY)
 # =========================================================
 best=df_out.iloc[0]
+symbol=stocks[best['Stock']]
 
-st.subheader(f"🔥 Top Pick: {best['Stock']}")
+df=yf.download(symbol, period="3mo")
+df=clean(df)
 
-st.write(best)
+fig = go.Figure()
+fig.add_trace(go.Candlestick(
+    x=df.index,
+    open=df['Open'],
+    high=df['High'],
+    low=df['Low'],
+    close=df['Close']
+))
 
-# TradingView Chart
-st.components.v1.html(f"""
-<iframe src="https://s.tradingview.com/widgetembed/?symbol=NSE:{best['Stock']}&interval=60&theme=light"
-width="100%" height="400"></iframe>
-""", height=420)
+fig.update_layout(height=400, title=f"{best['Stock']} Chart")
+
+st.plotly_chart(fig, use_container_width=True)
 
 # =========================================================
 # ⚠️ STRATEGY
 # =========================================================
 if n < -5:
-    st.warning("Risk-off: Prefer defensive stocks")
+    st.warning("📉 Risk-off: Prefer defensive stocks")
 elif n > 5:
-    st.success("Risk-on: Aggressive trades allowed")
+    st.success("🚀 Risk-on: Aggressive trades allowed")
 
-st.caption("Auto-refresh every 5 minutes • Hedge-level intelligence")
+st.caption("Auto-refresh every 5 min • Pro Intelligence")
