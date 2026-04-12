@@ -1,5 +1,5 @@
 # =========================================================
-# 📊 INDIAN MARKET INTELLIGENCE PRO V8 (FULL SYSTEM)
+# 📊 INDIAN MARKET INTELLIGENCE PRO V8 (FINAL FIXED)
 # =========================================================
 
 import streamlit as st
@@ -10,7 +10,7 @@ import yfinance as yf
 st.set_page_config(page_title="Market Intelligence PRO", layout="wide")
 
 # =========================================================
-# 🎨 UI
+# 🎨 UI STYLE
 # =========================================================
 st.markdown("""
 <style>
@@ -21,11 +21,20 @@ h1,h2,h3 {color:white;}
     padding:20px;
     border-radius:12px;
     color:white;
+    font-size:16px;
 }
 </style>
 """, unsafe_allow_html=True)
 
 st.title("📊 Indian Market Intelligence PRO V8")
+
+# =========================================================
+# 🧼 CLEAN DF FUNCTION (IMPORTANT FIX)
+# =========================================================
+def clean_df(df):
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+    return df
 
 # =========================================================
 # 📈 FETCH DATA
@@ -36,14 +45,13 @@ def fetch_data(symbol):
     if df.empty:
         return df
 
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-
+    df = clean_df(df)
     df = df[['Open','High','Low','Close','Volume']].dropna()
+
     return df
 
 # =========================================================
-# 🌍 GLOBAL SCORE
+# 🌍 GLOBAL MARKET SCORE (FIXED)
 # =========================================================
 def global_score():
     indices = ["^GSPC","^IXIC","^DJI","^N225","^HSI"]
@@ -55,9 +63,7 @@ def global_score():
         if df.empty or len(df) < 2:
             continue
 
-        # 🔧 FIX MULTI-INDEX ISSUE
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
+        df = clean_df(df)
 
         close = df['Close'].astype(float).values
 
@@ -67,8 +73,9 @@ def global_score():
             score -= 2
 
     return score
+
 # =========================================================
-# 🏦 SECTOR SCORE
+# 🏦 SECTOR SCORE (FIXED)
 # =========================================================
 def sector_score(symbol):
     sectors = {
@@ -83,17 +90,26 @@ def sector_score(symbol):
         if symbol in stocks:
             score = 0
             for s in stocks:
-                df = yf.download(s, period="2d")
-                if len(df) > 1:
-                    if df['Close'].iloc[-1] > df['Close'].iloc[-2]:
-                        score += 1
-                    else:
-                        score -= 1
+                df = yf.download(s, period="2d", interval="1d")
+
+                if df.empty or len(df) < 2:
+                    continue
+
+                df = clean_df(df)
+
+                close = df['Close'].astype(float).values
+
+                if close[-1] > close[-2]:
+                    score += 1
+                else:
+                    score -= 1
+
             return score
+
     return 0
 
 # =========================================================
-# 🧠 INDICATORS
+# 🧠 INDICATORS (SAFE)
 # =========================================================
 def indicators(df):
 
@@ -110,13 +126,15 @@ def indicators(df):
     ll = df['Low'].rolling(14).min()
     df['williams'] = -100*((hh-df['Close'])/(hh-ll+1e-9))
 
-    close = df['Close'].values
-    vol = df['Volume'].values
+    close = df['Close'].astype(float).values
+    vol = df['Volume'].astype(float).values
+
     obv=[0]
     for i in range(1,len(close)):
         if close[i]>close[i-1]: obv.append(obv[-1]+vol[i])
         elif close[i]<close[i-1]: obv.append(obv[-1]-vol[i])
         else: obv.append(obv[-1])
+
     df['obv']=obv
     df['obv_slope']=pd.Series(obv).diff()
 
@@ -165,11 +183,11 @@ stocks={
 
 results=[]
 
-g_score=global_score()
-
 # =========================================================
 # 🚀 MAIN ENGINE
 # =========================================================
+g_score=global_score()
+
 for name,symbol in stocks.items():
 
     df=fetch_data(symbol)
@@ -223,7 +241,6 @@ if results:
     </div>
     """,unsafe_allow_html=True)
 
-    # Market bias
     if g_score>5:
         st.success("📈 Market Bias: Bullish")
     elif g_score<-5:
